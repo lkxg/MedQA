@@ -18,34 +18,31 @@
 
 ## 主要内容
 
-- `prepare_data.py`：下载并预处理训练数据和评测数据
-- `finetune_baseline.py`：基于 Qwen3.5 的 LoRA / QLoRA 微调脚本
-- `eval_medqa.py`：评测 MedQA 中英文选择题
-- `eval_cmb.py`：评测 CMB 中文医学选择题
-- `eval_cmedqa2.py`：评测 cMedQA2 开放式问答
-- `MedicalKGBuilder.py`：从医疗知识源构建知识图谱
-- `Embedding.py`：使用 PyKEEN 训练 RotatE 并导出实体/关系嵌入
+代码统一存放在 `src/` 目录下：
+
+- **数据准备 (`src/data_prep/`)**
+  - `prepare_data.py`：下载并预处理训练数据和评测数据
+  - `build_kg_data.py`：从医疗知识源构建知识图谱
+- **模型微调 (`src/train/`)**
+  - `finetune_baseline.py`：基于 Qwen3.5 的 LoRA / QLoRA 微调脚本
+- **模型验证与评测 (`src/eval/`)**
+  - `eval_medqa.py`：评测 MedQA 中英文选择题
+  - `eval_cmb.py`：评测 CMB 中文医学选择题
+  - `eval_cmedqa2.py`：评测 cMedQA2 开放式问答
+- **知识图谱 (`src/kg/`)**
+  - `train_kg_embed.py`：使用 PyKEEN 训练 RotatE 并导出实体/关系嵌入
 
 ## 环境要求
 
-建议使用 Python 3.10+，并准备以下依赖：
+建议使用 Python 3.10+，可以直接通过 requirements 文件安装全部依赖：
 
-- `torch`
-- `transformers`
-- `datasets`
-- `peft`
-- `trl`
-- `bitsandbytes`
-- `accelerate`
-- `jieba`
-- `nltk`
-- `rouge-chinese`
-- `bert-score`
-- `tqdm`
-- `matplotlib`
-- `pykeen`
+```bash
+pip install -r requirements.txt
+```
 
-如果你使用的是本地模型目录，仓库当前默认会从如下路径加载模型：
+如果你的环境里已经有本地模型和 CUDA 版本，按需调整 `torch` 与 `bitsandbytes` 的安装方式。
+
+本地模型目录（仓库当前默认会从如下路径加载模型）：
 
 - `/datadisk/models/Qwen3.5-2B`
 - `/datadisk/models/Qwen3.5-4B`
@@ -55,158 +52,115 @@
 
 ```text
 MedQA/
-├── Embedding.py
-├── MedicalKGBuilder.py
-├── eval_cmb.py
-├── eval_cmedqa2.py
-├── eval_medqa.py
-├── finetune_baseline.py
-├── prepare_data.py
-├── models/
-├── kg_embedding/
-├── medical_kg_data/
-├── sft_data/
-└── test_data/
+├── README.md
+├── requirements.txt
+├── .gitignore
+├── checkpoints/           # 微调模型权重存放地
+├── data/                  # 汇总所有项目数据
+│   ├── medical_kg_data/   # 知识图谱三元组与实体映射
+│   ├── sft_data/          # 指令微调训练验证集
+│   └── test_data/         # MedQA、CMB、cMedQA2 等评测集
+├── kg_embedding/          # 知识图谱表示学习的模型和权重输出
+├── models/                # 基础大模型存放目录 (请勿提交到 Git)
+├── outputs/               # 评测输出的 JSON 日志和图表
+└── src/                   # 源代码目录
+    ├── data_prep/         # 数据处理
+    ├── eval/              # 模型评估
+    ├── kg/                # 知识图谱训练
+    └── train/             # 模型微调
 ```
 
 ## 数据与模型
 
-### 训练数据
+### 训练与评测数据
 
-`prepare_data.py` 会从 Hugging Face 下载并整理：
+`src/data_prep/prepare_data.py` 会从 Hugging Face 下载并整理：
 
 - HuatuoGPT-SFT-v1 训练数据
 - CMB 测试集
 - MedQA 测试集中的中文部分
 
-脚本默认会输出到：
-
-- `sft_data/train.jsonl`
-- `sft_data/val.jsonl`
-- `sft_data/cmb_test.jsonl`
-- `sft_data/medqa_test.jsonl`
-
-### 本地模型
-
-训练和评测默认使用本地 Qwen3.5 模型目录，不建议把大模型权重提交到 Git 仓库。
+脚本默认会输出到 `data/sft_data/` 和 `data/test_data/` 中。
 
 ### 知识图谱数据
 
-项目中还包含医疗知识图谱相关数据：
-
-- `medical_kg_data/`
-- `kg_embedding/`
+通过知识图谱脚本构建出来的数据和相应的嵌入表示分别放在 `data/medical_kg_data/` 和 `kg_embedding/` 下。
 
 ## 快速开始
 
-### 1. 安装依赖
-
-建议先创建虚拟环境，然后安装必要包：
+### 1. 准备数据
 
 ```bash
-pip install torch transformers datasets peft trl bitsandbytes accelerate jieba nltk rouge-chinese bert-score tqdm matplotlib pykeen
+python src/data_prep/prepare_data.py
 ```
+运行后会自动下载和整理训练集、验证集以及后续所需的评测集。
 
-如果你的环境里已经有本地模型和 CUDA 版本，按需调整 `torch` 与 `bitsandbytes` 的安装方式。
+### 2. 微调基座模型
 
-### 2. 准备数据
+默认使用 QLoRA 并输出模型到 `checkpoints/`，适合低显存场景：
 
 ```bash
-python prepare_data.py
+python src/train/finetune_baseline.py
 ```
 
-运行后会自动下载和整理训练集、验证集以及评测集。
-
-### 3. 微调基座模型
-
-默认是 QLoRA，适合低显存场景：
+可以显式指定模式或修改默认参数：
 
 ```bash
-python finetune_baseline.py
+python src/train/finetune_baseline.py --mode qlora
+python src/train/finetune_baseline.py --mode lora
 ```
 
-如果显存足够，也可以显式指定模式：
-
-```bash
-python finetune_baseline.py --mode qlora
-python finetune_baseline.py --mode lora
-```
-
-常用参数：
-
+常用参数选项：
 - `--model`：本地模型路径，默认 `/datadisk/models/Qwen3.5-4B`
 - `--epochs`：训练轮数
 - `--batch_size`：单卡 batch size
 - `--grad_accum_steps`：梯度累积步数
-- `--max_len`：最大序列长度
-- `--lora_r`：LoRA 低秩维度
-- `--resume`：从 checkpoint 恢复训练
 
-### 4. 运行评测
+### 3. 运行评测
 
-MedQA：
+评测脚本的输出会自动写入 `outputs/` 目录。
 
+MedQA 评测：
 ```bash
-python eval_medqa.py
+python src/eval/eval_medqa.py
+```
+*注意：`eval_medqa.py` 当前默认读取 `data/test_data/medqa_cn_test.jsonl` 和 `data/test_data/medqa_en_test.jsonl`。如果你只运行了 `prepare_data.py` 而没有英文数据或文件名不同，需提前重命名测试集文件或在评测脚本里修改路径。*
+
+CMB 评测：
+```bash
+python src/eval/eval_cmb.py
 ```
 
-注意：`eval_medqa.py` 当前默认读取 `test_data/medqa_cn_test.jsonl` 和 `test_data/medqa_en_test.jsonl`。如果你只运行了 `prepare_data.py`，需要先把数据整理成这两个文件名，或者按你的数据格式修改脚本里的路径。
-
-CMB：
-
+cMedQA2 评测：
 ```bash
-python eval_cmb.py
-```
-
-cMedQA2：
-
-```bash
-python eval_cmedqa2.py
+python src/eval/eval_cmedqa2.py
 ```
 
 ## 输出结果
 
-评测脚本会生成如下文件：
+评测脚本会在 `outputs/` 下生成：
+- `eval_results.json` 等原始测试指标
+- `medqa_eval_comparison.png` 等对比图表
 
-- `eval_results.json`
-- `eval_results_cmb.json`
-- `eval_results_cmedqa.json`
-- `medqa_eval_comparison.png`
-- `cmb_eval_comparison.png`
-- `cmedqa_eval_comparison.png`
+微调脚本会在 `checkpoints/` 下输出：
+- `baseline_lora_medical_*/final/` (融合后的最终权重或 LoRA 权重结构)
+- `training_info.json` (记录各项训练设定和时长)
 
-微调脚本会输出：
-
-- `baseline_lora_medical_*/final/`
-- `training_info.json`
-
-知识图谱脚本会输出：
-
-- `medical_kg_data/triples.tsv`
-- `medical_kg_data/entity_to_id.json`
-- `medical_kg_data/relation_to_id.json`
-- `medical_kg_data/entity_types.json`
-- `medical_kg_data/stats.json`
-- `kg_embedding/entity_embeddings.pt`
-- `kg_embedding/relation_embeddings.pt`
+知识图谱脚本（`src/kg/train_kg_embed.py`）会在 `kg_embedding/` 下生成：
+- `entity_embeddings.pt`
+- `relation_embeddings.pt`
 
 ## 说明与注意事项
 
-- `prepare_data.py` 和评测脚本默认使用 Hugging Face 镜像，适合国内网络环境。
-- 仓库中的模型权重体积很大，建议本地保存，不要提交到 GitHub。
-- `finetune_baseline.py` 默认基于 QLoRA，更适合有限显存；如果你有更强 GPU，可以尝试 LoRA 模式。
-- 评测脚本默认只跑前 100 条样本，适合快速检查流程；如果要完整评测，可以把 `num_samples` 改为 `None`。
+- 数据下载与评测脚本默认开启 Hugging Face 镜像（HF_ENDPOINT），以优化国内网络环境下的访问体验。
+- 仓库中的基座模型权重（`models/`）体积庞大，已被 Git 忽略，请务必本地管理，不要提交至远端。
+- `finetune_baseline.py` 默认基于 QLoRA 训练设置，能够适配多数设备的显存瓶颈；如果 GPU 计算资源更强（如具有 A100 80G 等），推荐切换至常规 FP16/BF16 的 LoRA 模式从而获取更优的微调效果。
+- 为了兼顾测试时效，评测程序默认对数据做 `num_samples=100` 的抽样截断来验证管线；获取正式指标时，请找到对应脚本并将此参数设定为 `None`。
 
 ## 研究定位
 
-如果把这个仓库作为论文课题的基础，它比较适合以下路线：
+如果将此项目作为毕业设计或科研论文的工作底座，非常适合开展以下课题或实验：
 
-- 医疗问答场景下的参数高效微调
-- 结合知识图谱或检索增强的医疗问答
-- 小资源条件下的医疗模型评测与对比实验
+- **聚焦高效医疗问答**：不同量级、不同参数高效微调方法（PEFT）在多模态或医疗数据集上的消融与效果探索。
+- **知识图谱嵌入融合或检索**：借助现有从文本中清洗出的三元组数据，探索外部知识如何帮助模型抑制事实性幻觉（如基于 RAG 的思路）。
 
-这类方向的优点是：数据集和 baseline 较齐全、实验容易做、适合逐步迭代出论文结果。
-
-## 许可
-
-仓库当前包含本地模型与数据处理脚本，实际使用时请同时遵守相关数据集和模型的原始许可证。
