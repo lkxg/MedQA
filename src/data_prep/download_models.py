@@ -19,8 +19,8 @@ MODELS = {
 
 def main():
     parser = argparse.ArgumentParser(description="一键下载 MedQA 项目所需的 Qwen3.5 模型")
-    parser.add_argument("--save_dir", type=str, default="/datadisk/models", 
-                        help="模型的保存根目录 (默认: /datadisk/models)")
+    parser.add_argument("--save_dir", type=str, default=os.path.abspath(os.path.join(os.path.dirname(__file__), "../../models")), 
+                        help="模型的保存根目录 (默认: 项目根目录下的 models 文件夹)")
     parser.add_argument("--models", nargs="+", choices=list(MODELS.keys()) + ["all"], 
                         default=["all"], help="指定要下载的模型")
     args = parser.parse_args()

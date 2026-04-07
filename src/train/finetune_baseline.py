@@ -32,7 +32,7 @@ from trl import SFTTrainer, SFTConfig
 # ============================================================
 # 配置
 # ============================================================
-MODEL_NAME = "/datadisk/models/Qwen3.5-4B" # 基座模型
+MODEL_NAME = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../models/Qwen3.5-4B")) # 基座模型
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/sft_data"))                   # 数据目录 (prepare_data.py 的输出)
 OUTPUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../checkpoints/baseline_lora_medical"))     # 模型输出目录
 MAX_SEQ_LEN = 1024                        # 32GB 显存下更稳妥的默认长度

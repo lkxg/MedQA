@@ -34,3 +34,4 @@ Thumbs.db
 
 # Project-generated data and local assets
 models/
+checkpoints/

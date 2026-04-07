@@ -45,9 +45,9 @@ pip install -r requirements.txt
 
 本地模型目录（仓库当前默认会从如下路径加载模型）：
 
-- `/datadisk/models/Qwen3.5-2B`
-- `/datadisk/models/Qwen3.5-4B`
-- `/datadisk/models/Qwen3.5-9B`
+- `models/Qwen3.5-2B`
+- `models/Qwen3.5-4B`
+- `models/Qwen3.5-9B`
 
 ## 目录结构
 
@@ -75,7 +75,7 @@ MedQA/
 
 ### 基座模型下载
 
-由于基座大模型（如 Qwen3.5-4B）体积庞大，项目中并不包含模型文件本身。你需要使用如下单独的下载脚本，它会默认利用 HuggingFace 国内镜像源下载模型到 `/datadisk/models/` 目录下（与代码默认引用的路径一致）：
+由于基座大模型（如 Qwen3.5-4B）体积庞大，项目中并不包含模型文件本身。你需要使用如下单独的下载脚本，它会默认利用 HuggingFace 国内镜像源下载模型到 `models/` 目录下（与代码默认引用的路径一致）：
 
 ```bash
 python src/data_prep/download_models.py
@@ -124,7 +124,7 @@ python src/train/finetune_baseline.py --mode lora
 ```
 
 常用参数选项：
-- `--model`：本地模型路径，默认 `/datadisk/models/Qwen3.5-4B`
+- `--model`：本地模型路径，默认 `models/Qwen3.5-4B`
 - `--epochs`：训练轮数
 - `--batch_size`：单卡 batch size
 - `--grad_accum_steps`：梯度累积步数

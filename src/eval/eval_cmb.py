@@ -8,9 +8,9 @@ import matplotlib.pyplot as plt
 
 # 设置模型路径
 MODELS = {
-    "Qwen3.5-2B": "/datadisk/models/Qwen3.5-2B",
-    "Qwen3.5-4B": "/datadisk/models/Qwen3.5-4B",
-    "Qwen3.5-9B": "/datadisk/models/Qwen3.5-9B",
+    "Qwen3.5-2B": os.path.abspath(os.path.join(os.path.dirname(__file__), "../../models/Qwen3.5-2B")),
+    "Qwen3.5-4B": os.path.abspath(os.path.join(os.path.dirname(__file__), "../../models/Qwen3.5-4B")),
+    "Qwen3.5-9B": os.path.abspath(os.path.join(os.path.dirname(__file__), "../../models/Qwen3.5-9B")),
 }
 
 # CMB 数据集
