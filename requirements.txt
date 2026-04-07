@@ -12,3 +12,5 @@ bert-score
 tqdm
 matplotlib
 pykeen
+huggingface-hub
+hf-transfer

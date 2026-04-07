@@ -21,6 +21,7 @@
 代码统一存放在 `src/` 目录下：
 
 - **数据准备 (`src/data_prep/`)**
+  - `download_models.py`：自动下载所需的 Qwen3.5 模型 （新增）
   - `prepare_data.py`：下载并预处理训练数据和评测数据
   - `build_kg_data.py`：从医疗知识源构建知识图谱
 - **模型微调 (`src/train/`)**
@@ -71,6 +72,18 @@ MedQA/
 ```
 
 ## 数据与模型
+
+### 基座模型下载
+
+由于基座大模型（如 Qwen3.5-4B）体积庞大，项目中并不包含模型文件本身。你需要使用如下单独的下载脚本，它会默认利用 HuggingFace 国内镜像源下载模型到 `/datadisk/models/` 目录下（与代码默认引用的路径一致）：
+
+```bash
+python src/data_prep/download_models.py
+```
+你也可以通过 `--models Qwen3.5-4B` 参数指定只下载需要的版本，或修改保存路径：
+```bash
+python src/data_prep/download_models.py --save_dir /your/custom/models --models Qwen3.5-4B
+```
 
 ### 训练与评测数据
 
