@@ -35,7 +35,7 @@ from trl import SFTTrainer, SFTConfig
 MODEL_NAME = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../models/Qwen3.5-4B")) # 基座模型
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/sft_data"))                   # 数据目录 (prepare_data.py 的输出)
 OUTPUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../checkpoints/baseline_lora_medical"))     # 模型输出目录
-MAX_SEQ_LEN = 1024                        # 32GB 显存下更稳妥的默认长度
+MAX_SEQ_LEN = 512                        # 32GB 显存下更稳妥的默认长度
 
 # LoRA 超参数
 LORA_R = 16                               # 低秩维度
@@ -48,17 +48,17 @@ LORA_TARGET_MODULES = [                   # 应用 LoRA 的模块
 
 # 训练超参数
 NUM_EPOCHS = 1
-BATCH_SIZE = 1                            # 单卡 32GB + 9B 模型建议从 1 起步
-GRAD_ACCUM_STEPS = 8                      # 等效 batch_size = 1 × 8 = 8
+BATCH_SIZE = 2                            # 单卡 32GB + 4B 模型建议从 1 起步
+GRAD_ACCUM_STEPS = 4                      # 等效 batch_size = 2 × 4 = 8
 LEARNING_RATE = 2e-4
 WARMUP_RATIO = 0.03
-LOGGING_STEPS = 20
+LOGGING_STEPS = 50
 SAVE_STEPS = 500
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="医疗大模型 LoRA/QLoRA 微调 Baseline")
-    parser.add_argument("--mode", choices=["lora", "qlora"], default="qlora",
+    parser.add_argument("--mode", choices=["lora", "qlora"], default="lora",
                         help="微调模式: lora(fp16) 或 qlora(4-bit量化)")
     parser.add_argument("--model", default=MODEL_NAME, help="基座模型名称")
     parser.add_argument("--epochs", type=int, default=NUM_EPOCHS)
@@ -108,7 +108,7 @@ def load_model_and_tokenizer(model_name, mode="lora"):
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    
+
     # 模型加载配置
     model_kwargs = {
         "trust_remote_code": True,
@@ -131,6 +131,9 @@ def load_model_and_tokenizer(model_name, mode="lora"):
         print("  📦 使用 bfloat16 (LoRA 模式)")
     
     model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
+
+    model.config.pad_token_id = tokenizer.pad_token_id
+    model.generation_config.pad_token_id = tokenizer.pad_token_id
     
     # QLoRA 需要额外准备
     if mode == "qlora":
@@ -164,14 +167,6 @@ def apply_lora(model, lora_r=16, lora_alpha=32):
     return model
 
 
-def format_chat(example, tokenizer):
-    """将 messages 格式转换为模型输入文本"""
-    messages = example["messages"]
-    # 使用 tokenizer 内置的 chat template
-    text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
-    return {"text": text}
-
-
 def main():
     args = parse_args()
     
@@ -193,14 +188,9 @@ def main():
     # 2. 加载模型
     model, tokenizer = load_model_and_tokenizer(args.model, args.mode)
     
-    # 3. 格式化数据 (应用 chat template)
-    print("\n🔄 应用 Qwen 聊天模板格式化数据...")
-    train_ds = train_ds.map(lambda x: format_chat(x, tokenizer), num_proc=4)
-    val_ds = val_ds.map(lambda x: format_chat(x, tokenizer), num_proc=4)
-    
-    # 打印一个样例
-    print(f"\n--- 格式化后的样例 (截取前500字) ---")
-    print(train_ds[0]["text"][:500])
+    # 3. 打印一个样例 (TRL 将自动处理 messages 格式，无需手动 map)
+    print(f"\n--- 数据集样例 (原始 messages 结构) ---")
+    print(train_ds[0]["messages"])
     print("---")
     
     # 4. 应用 LoRA
@@ -210,6 +200,10 @@ def main():
     output_dir = f"{OUTPUT_DIR}_{args.mode}_r{args.lora_r}"
     
     training_args = SFTConfig(
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
+        max_length=args.max_len,
         output_dir=output_dir,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
@@ -231,16 +225,16 @@ def main():
         eval_steps=SAVE_STEPS,
         
         # 其他
-        gradient_checkpointing=True,
+        gradient_checkpointing=False,
         report_to="none",                 # 不上传到 wandb, 如需要改为 "wandb"
         seed=42,
-        dataset_text_field="text",
-        # max_seq_length 针对 TRL 1.0 需配在 SFTConfig 的 init 之外或按最新参数处理
+        
+        # 只对助理回答计算 loss (TRL 自带功能)
+        assistant_only_loss=True,
+        
         dataloader_num_workers=4,         # 使用多进程加速数据加载
     )
     
-    # 针对 trl==1.0.0 的特定参数改动：最大长度属性已改名为 max_seq_length 放于 SFTConfig 中，或者需要在 trainer 初始化传递。
-    training_args.max_seq_length = args.max_len
     
     # 6. 训练
     trainer = SFTTrainer(

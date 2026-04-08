@@ -14,7 +14,7 @@ import os
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 import json
-from datasets import load_dataset
+from datasets import concatenate_datasets, load_dataset
 
 SAVE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/sft_data"))
 os.makedirs(SAVE_DIR, exist_ok=True)
@@ -58,12 +58,53 @@ def format_for_qwen(example):
     }
 
 print("\n🔄 格式化训练数据为 Qwen 聊天模板 (随机抽取5万条数据)...")
-# 为了保证数据分布均匀，先打乱数据集，再取前50000条
-subset = sft_ds["train"].shuffle(seed=42).select(range(50000))
-formatted = subset.map(format_for_qwen, remove_columns=subset.column_names)
 
-# 划分训练/验证集 (95%/5%)
-split = formatted.train_test_split(test_size=0.05, seed=42)
+# ============================================================
+# 1. 准备 HuatuoGPT-SFT 数据 (取5万条)
+# ============================================================
+print("\n🔄 格式化 HuatuoGPT-SFT 数据 (抽取5万条)...")
+huatuo_subset = sft_ds["train"].shuffle(seed=42).select(range(50000))
+huatuo_formatted = huatuo_subset.map(format_for_qwen, remove_columns=huatuo_subset.column_names)
+
+# ============================================================
+# 2. 准备 cMedQA2 真实问答数据 (取1万条)
+# ============================================================
+print("\n📥 正在下载 cMedQA2 数据集...")
+# HuggingFace 上有开源的 cMedQA2 数据集（例如 fzkuji/cMedQA2）
+cmedqa_ds = load_dataset("fzkuji/cMedQA2", "deduplicate_all", split="train")
+
+def format_cmedqa_for_qwen(example):
+    """将 cMedQA2 一问一答的真实问诊转换为 Qwen chat 格式"""
+    instruction = example.get("question", "").strip()
+    output = example.get("answer", "").strip()
+    
+    return {
+        "messages": [
+            {"role": "system", "content": "你是一个专业的医学AI助手，请根据医学知识准确回答问题。"},
+            {"role": "user", "content": instruction},
+            {"role": "assistant", "content": output},
+        ]
+    }
+
+print("🔄 格式化 cMedQA2 数据 (抽取1万条)...")
+
+# 过滤掉空数据并随机抽取1万条 (因为加载时指定了 split="train"，所以此处直接使用 cmedqa_ds)
+cmedqa_subset = cmedqa_ds.filter(lambda x: len(x['question']) > 0 and len(x['answer']) > 0)
+cmedqa_subset = cmedqa_subset.shuffle(seed=42).select(range(10000))
+cmedqa_formatted = cmedqa_subset.map(format_cmedqa_for_qwen, remove_columns=cmedqa_subset.column_names)
+
+
+# ============================================================
+# 3. 混合数据 (合并并打乱)
+# ============================================================
+print("\n🔀 正在混合 HuatuoGPT (5W) + cMedQA2 (1W) 联合数据集...")
+# 将两部分数据合并
+mixed_dataset = concatenate_datasets([huatuo_formatted, cmedqa_formatted])
+# ⭐ 混合后一定要整体 shuffle，防止训练时局部梯度震荡
+mixed_dataset = mixed_dataset.shuffle(seed=42)
+
+# 划分训练/验证集 (依然保证 90% / 10% 的切割)
+split = mixed_dataset.train_test_split(test_size=0.1, seed=42)
 train_data = split["train"]
 val_data = split["test"]
 
@@ -83,7 +124,7 @@ print(f"  ✅ 训练集: {len(train_data)} 条 → {train_path}")
 print(f"  ✅ 验证集: {len(val_data)} 条 → {val_path}")
 
 # ============================================================
-# 2. 下载 CMB 评测数据
+# 3. 下载 CMB 评测数据
 # ============================================================
 print("\n📥 正在下载 CMB (中文医学基准) 评测数据集...")
 try:
