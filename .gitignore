@@ -18,7 +18,7 @@ venv/
 env/
 ENV/
 
-# Notebook checkpoints
+# Notebook checkpoints\
 .ipynb_checkpoints/
 
 # Environment files
@@ -35,3 +35,9 @@ Thumbs.db
 # Project-generated data and local assets
 models/
 checkpoints/
+kg_embedding/
+
+data/
+*.tsv
+train.jsonl
+val.jsonl
