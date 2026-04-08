@@ -1,10 +1,7 @@
-# MedQA Medical LLM Experiment Repository / MedQA 医疗大模型实验仓库
-
+# MedQA-Lab: Low-Resource Medical LLM & Knowledge Graph Framework
 [**English**](#english) | [**中文**](#中文)
 
 ---
-
-<h2 id="english">🇬🇧 English Documentation</h2>
 
 This is a low-resource deep learning experiment repository oriented towards medical question-answering and knowledge graph enhancement. It is suitable for producing reproducible and comparable experimental results under single-GPU or limited computing power conditions. The project focuses on the following directions:
 
