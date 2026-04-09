@@ -127,7 +127,7 @@ def load_model_and_tokenizer(model_name, mode="lora"):
         model_kwargs["quantization_config"] = bnb_config
         print("  📦 使用 4-bit NF4 量化 (QLoRA 模式)")
     else:
-        model_kwargs["torch_dtype"] = torch.bfloat16
+        model_kwargs["dtype"] = torch.bfloat16
         print("  📦 使用 bfloat16 (LoRA 模式)")
     
     model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
