@@ -4,7 +4,7 @@ Step 2: 标准 LoRA/QLoRA 微调 Baseline
   训练数据: HuatuoGPT-SFT
   
   用法:
-    python finetune_baseline.py                  # 默认 QLoRA (显存 ≤ 16GB)
+    python finetune_baseline.py                  # 默认 LoRA
     python finetune_baseline.py --mode lora      # LoRA fp16 (需要 24GB+ 显存)
     python finetune_baseline.py --mode qlora     # QLoRA 4-bit
 """
@@ -48,10 +48,10 @@ LORA_TARGET_MODULES = [                   # 应用 LoRA 的模块
 
 # 训练超参数
 NUM_EPOCHS = 1
-BATCH_SIZE = 2                            # 单卡 32GB + 4B 模型建议从 1 起步
-GRAD_ACCUM_STEPS = 4                      # 等效 batch_size = 2 × 4 = 8
+BATCH_SIZE = 8                            # 32GB 显存可以开到 8
+GRAD_ACCUM_STEPS = 2                      # 等效 batch_size = 8 × 2 = 16
 LEARNING_RATE = 2e-4
-WARMUP_RATIO = 0.03
+WARMUP_STEPS = 100
 LOGGING_STEPS = 50
 SAVE_STEPS = 500
 
@@ -211,7 +211,7 @@ def main():
         gradient_accumulation_steps=args.grad_accum_steps,
         learning_rate=args.lr,
         lr_scheduler_type="cosine",
-        warmup_ratio=WARMUP_RATIO,
+        warmup_steps=WARMUP_STEPS,
         weight_decay=0.01,
         
         # 精度
@@ -225,8 +225,9 @@ def main():
         eval_steps=SAVE_STEPS,
         
         # 其他
-        gradient_checkpointing=False,
-        report_to="none",                 # 不上传到 wandb, 如需要改为 "wandb"
+        gradient_checkpointing=True,         # 32GB 显存充足，关闭以提速 ~30%
+        report_to="wandb",                # 开启 wandb 云端可视化
+        run_name=f"MedQA-Qwen4B-lora-r{args.lora_r}", # wandb 显示的运行名称
         seed=42,
         
         # 只对助理回答计算 loss (TRL 自带功能)
