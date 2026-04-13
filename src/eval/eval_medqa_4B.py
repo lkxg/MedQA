@@ -22,10 +22,21 @@ DATASETS = {
 def extract_answer(text):
     text = text.strip()
     if text.upper() in ['A', 'B', 'C', 'D']: return text.upper()
-    match = re.search(r'(?:答案|answer)\s*(?:is|为|：|:)?\s*([A-D])', text, re.IGNORECASE)
+    
+    # 1. 假设直接输出在了开头，例如 "C。HCV..." 或 "A，因为..."
+    match = re.search(r'^([A-D])[^A-Za-z]', text, re.IGNORECASE)
     if match: return match.group(1).upper()
-    match = re.search(r'\b([A-D])\b', text)
-    if match: return match.group(1)
+    
+    # 2. 尝试匹配带前缀的答案表达式
+    match = re.search(r'(?:答案|选项|选|answer\s+is|应选)\s*(?:为|是|：|:)?\s*([A-D])', text, re.IGNORECASE)
+    if match: return match.group(1).upper()
+    
+    # 3. 兜底提取独立的A-D字母（排除 HCV, CT, DNA, B超 等医疗术语中的字母）
+    letters = re.findall(r'(?<![A-Za-z])[A-D](?![A-Za-z])', text.upper())
+    if letters:
+        # 如果没有匹配到开头或带有答案前缀，且文本里有独立的单个大写字母，默认选第一个出现的
+        return letters[0]
+        
     return ""
 
 def load_data(file_path):
@@ -72,13 +83,34 @@ def evaluate_model(model_path, dataset_path, num_samples=100):
     correct, total = 0, len(dataset)
     with torch.no_grad():
         for i, item in enumerate(tqdm(dataset, desc=f"Evaluating {os.path.basename(model_path)}")):
+            # `build_prompt` returns dictionary containing strings for instruction but `apply_chat_template` needs a list of dicts.
             messages = build_prompt(item)
+            # `apply_chat_template` requires messages format: [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
+            if isinstance(messages, tuple):
+                messages = list(messages)
             text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
             inputs = tokenizer(text, return_tensors="pt").to(model.device)
-            outputs = model.generate(**inputs, max_new_tokens=8, do_sample=False, pad_token_id=tokenizer.eos_token_id)
+            
+            # 加入聊天模板的结束符 <|im_end|> 作为停止条件，防止模型自言自语（角色扮演幻觉）
+            stop_words_ids = [tokenizer.eos_token_id]
+            if "<|im_end|>" in tokenizer.vocab:
+                stop_words_ids.append(tokenizer.convert_tokens_to_ids("<|im_end|>"))
+                
+            outputs = model.generate(
+                **inputs, 
+                max_new_tokens=128, 
+                do_sample=False, 
+                pad_token_id=tokenizer.eos_token_id,
+                eos_token_id=stop_words_ids
+            )
+            
             pred_text = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True).strip()
             
             pred_char = extract_answer(pred_text)
+            
+            if i < 10:
+                print(f"真实答案: {item.get('answer_idx', '')} | 模型预测: {pred_char} | 模型原文: {pred_text}")
+                
             if pred_char == item.get("answer_idx", ""):
                 correct += 1
 

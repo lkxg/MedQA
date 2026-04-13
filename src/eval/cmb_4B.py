@@ -15,16 +15,17 @@ MODELS = {
 # CMB 数据集
 CMB_DATASET = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/test_data/cmb_test.jsonl"))
 
-def extract_answer(text):
+def extract_answer(text, is_multi=False):
     """鲁棒地从模型输出中提取选项字母，支持单选和多选提取"""
     text = text.strip()
-    # 尝试匹配带前缀的答案表达式
-    match = re.search(r'(?:答案|answer)\s*(?:is|are|为|：|:)?\s*([A-F\s,、及和]+)', text, re.IGNORECASE)
+    
+    # 1. 假设直接输出在了开头，例如 "C。HCV..." 或 "AB，因为..."
+    match = re.search(r'^([A-F\s,、及和]{1,6})[^A-Za-z]', text, re.IGNORECASE)
     if match:
         res = match.group(1)
     else:
-        # 假设直接输出在了开头
-        match = re.search(r'^([A-F\s,、及和]+)', text)
+        # 2. 尝试匹配带前缀的答案表达式，如“答案是A”，“选C”等
+        match = re.search(r'(?:答案|选项|选|answer\s+is|应选)\s*(?:为|是|：|:)?\s*([A-F\s,、及和]{1,6})', text, re.IGNORECASE)
         if match:
             res = match.group(1)
         else:
@@ -32,6 +33,15 @@ def extract_answer(text):
             
     # 从初步提取的字符串中，匹配所有的 A-F，去重并按首字母排序拼合
     letters = re.findall(r'[A-F]', res.upper())
+    
+    if not letters:
+        # 3. 兜底提取独立的A-F字母（排除 HCV, CT, DNA, B超 等医疗术语中的字母）
+        letters = re.findall(r'(?<![A-Za-z])[A-F](?![A-Za-z])', text.upper())
+        
+    if letters and not is_multi and len(letters) > 1:
+        # 如果是单选但提到了多个独立的选项，通常取最前面那个为它最想表达的意思（如 "C。也是..."，C肯定在前面）
+        letters = [letters[0]]
+        
     return "".join(sorted(list(set(letters))))
 
 def load_data(file_path):
@@ -125,12 +135,25 @@ def evaluate_cmb(model_path, dataset_path, num_samples=100):
                 enable_thinking=False
             )
             inputs = tokenizer(text, return_tensors="pt").to(model.device)
-            # 限制生成长度
-            outputs = model.generate(**inputs, max_new_tokens=8, do_sample=False, pad_token_id=tokenizer.eos_token_id)
+            
+            # 加入聊天模板的结束符 <|im_end|> 作为停止条件，防止模型自言自语（角色扮演幻觉）
+            stop_words_ids = [tokenizer.eos_token_id]
+            if "<|im_end|>" in tokenizer.vocab:
+                stop_words_ids.append(tokenizer.convert_tokens_to_ids("<|im_end|>"))
+                
+            # 限制生成长度（增大以防止微调后的模型因为输出过多分析而被截断）
+            outputs = model.generate(
+                **inputs, 
+                max_new_tokens=128, 
+                do_sample=False, 
+                pad_token_id=tokenizer.eos_token_id,
+                eos_token_id=stop_words_ids
+            )
             pred_text = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True).strip()
             
             # 提取与对比答案
-            pred_char = extract_answer(pred_text)
+            is_multi = "多" in item.get("question_type", "单项选择题")
+            pred_char = extract_answer(pred_text, is_multi=is_multi)
             ground_truth = item.get("answer_idx", "")
             # 对基准答案同样进行 A-F 去重排序的大写格式化（防止如'BA'而模型答'AB'的情况错判）
             ground_truth = "".join(sorted(list(set(re.findall(r'[A-F]', ground_truth.upper())))))

@@ -98,14 +98,29 @@ def evaluate_cmedqa(model_path, dataset_path, num_samples=100):
             for m in item.get("messages"):
                 if m["role"] == "system":
                     m_copy = m.copy()
-                    m_copy["content"] = "你是一名专业的医疗问答医生，请用中文回答问题：先给简短判断，再给1到2条处理建议。不要过度诊断，不要给复杂病理分析，不要给过多药名、剂量或详细治疗方案；若信息不足，只说“考虑”“可能”“建议检查/复查”。回答控制在2句内、100字以内，不要分点，不要标题，绝不能使用任何客套话、寒暄、以及索要评价等无关废话。"
+                    m_copy["content"] = "你是一名专业的医疗问答医生：先给简短判断，再给1到2条处理建议。回答控制在2、3句内，不要分点，不要标题"
                     prompt_msgs.append(m_copy)
                 elif m["role"] == "user":
                     prompt_msgs.append(m)
                     
             text = tokenizer.apply_chat_template(prompt_msgs, tokenize=False, add_generation_prompt=True, enable_thinking=False)
             inputs = tokenizer(text, return_tensors="pt").to(model.device)
-            outputs = model.generate(**inputs, max_new_tokens=128, do_sample=True, temperature=0.7, top_p=0.85, repetition_penalty=1.15, pad_token_id=tokenizer.eos_token_id, eos_token_id=tokenizer.eos_token_id)
+            
+            # Qwen3.5 的 chat 模板是用 <|im_end|> 作为结束符
+            # 需要将它加入到停止条件里，否则模型会无限生成停不下来
+            stop_words_ids = [tokenizer.eos_token_id]
+            if "<|im_end|>" in tokenizer.vocab:
+                stop_words_ids.append(tokenizer.convert_tokens_to_ids("<|im_end|>"))
+            
+            outputs = model.generate(
+                **inputs, 
+                max_new_tokens=128, 
+                do_sample=True, 
+                temperature=0.7, 
+                top_p=0.85, 
+                pad_token_id=tokenizer.eos_token_id, 
+                eos_token_id=stop_words_ids
+            )
             pred_text = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True).strip()
             ref_text = item.get("answer", "").strip()
             preds.append(pred_text)
