@@ -1,0 +1,14 @@
+{
+  "model": "RotatE",
+  "MRR": 0.3702654540538788,
+  "Hits@1": 0.2974260970535585,
+  "Hits@3": 0.4034060670569452,
+  "Hits@10": 0.5074265808699018,
+  "training_time_min": 37.3,
+  "num_entities": 22448,
+  "num_relations": 7,
+  "embedding_dim": 256,
+  "actual_emb_dim": 1024,
+  "inverse_triples": true,
+  "note": "relation_to_id含逆关系，原始关系数为num_relations//2"
+}
